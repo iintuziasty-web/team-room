@@ -1,8 +1,9 @@
 # Landing design
 
-The central visual is a working desk with two linked windows. It demonstrates a provider handoff and a computer change using synthetic content. The same short task remains visible across the transition.
+Match the application itself: charcoal #151515, sidebar #111111, panel #20201f, warm text #f0efec, muted #c3c2b7, border #3d3d39, accent #d97757, status #83b58b. No light or cobalt surfaces.
 
-Palette: mist #eef2f8, paper #ffffff, ink #16233e, muted #5c687e, cobalt #2855e9, positive #168465.
-Typography: locally hosted Manrope for interface and headings, system monospace only for commands. Content is left aligned with a 72-character reading measure.
-Layout: compact navigation, large headline beside the interactive desk, horizontal feature explanation, ownership diagram, three installation steps and FAQ. The demo carries the visual complexity; the rest stays quiet.
-Motion: one initial handoff sequence and user-triggered transitions. No scroll-jacking. Respect reduced motion and keep the demo's status updates out of the accessibility live region during initial animation.
+Use the same locally hosted Manrope interface font and Lora reading/display font as the application. The center-aligned greeting leads directly into a full-width live workspace illustration with sidebar, chat, files, agent status and composer.
+
+Motion explains the product: a typed reply, saved context, a provider handoff, continuation on another computer and a session board. Provide a visible pause control, stop timers out of view or when the document is hidden, cancel stale typing during manual navigation, and respect reduced motion. All example content is synthetic and stays local in the page.
+
+Supporting sections retain the app's visual vocabulary: warm outline controls, restrained dividers, project surfaces and readable serif headings. Mobile keeps the full story with a compact chat and touch controls; it never requires horizontal page scrolling.

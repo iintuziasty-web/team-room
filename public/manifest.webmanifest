@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Team Room",
+  "short_name": "Team Room",
+  "description": "Общие чаты Claude и Codex, память и файлы проекта. Работа выполняется на выбранном компьютере.",
+  "lang": "ru",
+  "start_url": "/room/",
+  "scope": "/room/",
+  "display": "standalone",
+  "background_color": "#151515",
+  "theme_color": "#151515",
+  "icons": [
+    {
+      "src": "/icons/team-room-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

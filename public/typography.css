@@ -1,0 +1,25 @@
+/* Shared typography on Mac, web, phone, and the second conversation pane.
+   Open fonts with Russian/Ukrainian coverage; font files are served locally. */
+:root {
+ --font-ui:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+ --font-reading:"Lora",Georgia,"Times New Roman",serif;
+ --font-code:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+:root,html.phone-web-client {font-family:var(--font-ui);font-weight:400}
+button,input,select,textarea {font-family:var(--font-ui)}
+.empty h1,.phone-web-client .empty h1,.auth-card h1,.drag-overlay {font-family:var(--font-reading)}
+.message.assistant .message-text {font-family:var(--font-reading)}
+.message.user .message-text,.message.assistant .artifact-card {font-family:var(--font-ui)}
+pre,code,kbd,samp,.message-text code,.native-session-id,.mcp-add textarea,.skill-readme,.code-copy {font-family:var(--font-code)}
+.agent-output {font-family:var(--font-ui)}
+
+/* Compact navigation matches the 14px UI scale, with quieter 11px metadata.
+   Phone touch sizes and the message/composer spacing stay in phone.css. */
+@media(min-width:761px) and (hover:hover) and (pointer:fine) {
+ .sidebar .new-chat,.sidebar .side-links button,.sidebar .project-toggle,
+ .sidebar .project-chats .chat-row .chat-name {font-size:14px;line-height:20px;font-weight:500}
+ .sidebar .project-chats .chat-row .chat-meta {font-size:11px;line-height:15px;font-weight:400}
+ .sidebar .project-list-heading,.sidebar .section-label,.sidebar .search {font-size:12px;line-height:18px}
+ .sidebar .profile-button .account {font-size:13px;line-height:18px}
+ .sidebar .profile-button small {font-size:11px;line-height:15px}
+}

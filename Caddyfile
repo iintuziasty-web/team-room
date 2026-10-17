@@ -1,0 +1,3 @@
+{$TEAM_ROOM_DOMAIN} {
+    reverse_proxy team-room:4173
+}

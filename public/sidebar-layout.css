@@ -1,0 +1,27 @@
+/* Desktop section sizes are independent of the phone drawer and chat drag/drop. */
+@media(min-width:761px) and (hover:hover) and (pointer:fine){
+ .app{position:relative}
+ .app.sidebar-collapsed .sidebar{display:flex;position:absolute;inset:0 auto 0 0;width:248px;height:100%;z-index:16;transform:translateX(calc(-100% - 1px));visibility:hidden;pointer-events:none;transition:transform .18s ease-out,visibility 0s .18s;box-shadow:12px 0 32px #0005}
+ .app.sidebar-collapsed.sidebar-peek .sidebar{transform:translateX(0);visibility:visible;pointer-events:auto;transition:transform .18s ease-out,visibility 0s}
+}
+@media(prefers-reduced-motion:reduce){.app.sidebar-collapsed .sidebar{transition:none}}
+@media(min-width:1001px){
+ .sidebar.has-resizable-sections{min-height:0;overflow:hidden}
+ .sidebar.has-resizable-sections>.brand,
+ .sidebar.has-resizable-sections>.new-chat,
+ .sidebar.has-resizable-sections>.side-footer{flex:none}
+ .sidebar-tools-section{flex:0 0 var(--sidebar-tools-height,240px);min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+ .sidebar-tools-section>.side-links{margin:6px 0 0}
+ .sidebar-projects-section{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden}
+ .sidebar-projects-section>.search,
+ .sidebar-projects-section>.project-list-heading{flex:none}
+ .sidebar-projects-section>.chat-list{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+ .sidebar-section-divider{display:flex;align-items:center;justify-content:center;gap:7px;flex:0 0 17px;height:17px;margin:3px 2px;cursor:row-resize;touch-action:none;user-select:none;color:var(--line);border-radius:5px;outline-offset:0}
+ .sidebar-divider-line{height:1px;flex:1;background:currentColor;opacity:.7}
+ .sidebar-divider-grip{width:24px;height:5px;flex:none;border-top:1px solid currentColor;border-bottom:1px solid currentColor;border-radius:2px}
+ .sidebar-section-divider:hover,
+ .sidebar-section-divider:focus-visible,
+ .sidebar-sections-resizing>.sidebar-section-divider{color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+ .sidebar-section-resizing,
+ .sidebar-section-resizing *{cursor:row-resize!important;user-select:none!important}
+}

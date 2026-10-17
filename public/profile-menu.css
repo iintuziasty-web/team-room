@@ -1,0 +1,44 @@
+/* Account actions share compact, outlined rows with clear touch targets. */
+dialog:has(.profile-menu){width:min(480px,calc(100vw - 32px));padding:20px;border-radius:20px}
+dialog:has(.profile-menu) .modal-head{gap:16px;align-items:center;margin-bottom:16px}
+dialog:has(.profile-menu) .modal-head h2{margin:0;font-size:20px;line-height:1.3;overflow-wrap:anywhere}
+dialog:has(.profile-menu) .modal-head>button:last-child{display:flex;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--panel);font-size:24px;line-height:1}
+.profile-menu{font-family:var(--font-ui,inherit);font-size:14px;line-height:1.45}
+.profile-menu-space{margin:0 0 20px}
+.profile-menu-space h3{font-size:12px;line-height:1.4;color:var(--muted);font-weight:500;margin:0 0 10px}
+.profile-members{display:flex;flex-wrap:wrap;gap:8px}
+.profile-member{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:5px 9px 5px 5px;border:1px solid var(--line);border-radius:20px;background:var(--panel);font-size:12px;line-height:1.4}
+.profile-member-avatar{display:grid;place-items:center;flex:none;width:24px;height:24px;background:var(--hover);color:var(--muted);border-radius:50%;font-size:11px}
+.profile-member-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-member small{color:var(--muted);font-size:11px;flex:none}
+.profile-menu-space p{margin:10px 0 0;font-size:12px;line-height:1.5;color:var(--muted)}
+.profile-menu-actions{display:grid;gap:8px}
+.profile-menu .profile-menu-action{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);text-align:left;color:var(--text);transition:background-color 100ms ease,border-color 100ms ease}
+.profile-menu .profile-menu-action:hover{background:var(--hover);border-color:var(--muted)}
+.profile-menu .profile-menu-action:active{background:color-mix(in srgb,var(--accent) 12%,var(--panel));border-color:var(--accent)}
+.profile-menu-icon{display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex:none;color:var(--accent)}
+.profile-menu-icon svg{display:block;width:22px;height:22px}
+.profile-menu-action-copy{display:block;flex:1;min-width:0}
+.profile-menu-action-copy strong{display:block;font-size:14px;line-height:1.4;font-weight:600;overflow-wrap:anywhere}
+.profile-menu-action-copy small{display:block;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.profile-menu-chevron{display:flex;flex:none;color:var(--muted)}
+.profile-menu-chevron svg{width:16px;height:16px}
+.profile-menu-footer{border-top:1px solid var(--line);margin-top:16px;padding-top:12px}
+.profile-menu .profile-menu-logout{display:flex;align-items:center;gap:12px;min-height:48px;width:100%;padding:10px 14px;text-align:left;border:1px solid color-mix(in srgb,var(--red) 35%,var(--line));border-radius:12px;background:transparent;color:var(--red);font-size:13px;line-height:1.4}
+.profile-menu-logout .profile-menu-icon{color:inherit}
+.profile-menu .profile-menu-logout:hover{border-color:var(--red);background:color-mix(in srgb,var(--red) 8%,var(--panel))}
+.profile-menu .profile-menu-logout:active{background:color-mix(in srgb,var(--red) 14%,var(--panel))}
+@media(max-width:760px),(hover:none) and (pointer:coarse){
+ .profile-menu-space h3{font-size:13px}
+ .profile-menu-action-copy strong{font-size:15px}
+ .profile-menu-action-copy small{font-size:13px}
+ .profile-menu .profile-menu-action{min-height:70px;padding:13px 14px}
+ .profile-menu .profile-menu-logout{min-height:52px;font-size:14px}
+ .phone-web-client dialog:has(.profile-menu){width:100%;max-width:100%;padding:0;border-radius:24px 24px 0 0}
+ .phone-web-client dialog:has(.profile-menu) .modal-head{gap:8px;margin-bottom:0}
+ .phone-web-client .profile-menu-space h3{font-size:13px;line-height:1.4;margin:0 0 10px}
+ .phone-web-client .profile-menu-space p{font-size:13px;line-height:1.5;margin:10px 0 0}
+ .phone-web-client .profile-member small{font-size:11px}
+ .phone-web-client .profile-menu-action-copy small{font-size:13px;line-height:1.4}
+}
+@media(prefers-reduced-motion:reduce){.profile-menu .profile-menu-action{transition:none}}

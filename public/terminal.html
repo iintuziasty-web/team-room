@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Личные терминалы · Team Room</title>
+  <link rel="stylesheet" href="/terminal-assets/@xterm/xterm/css/xterm.css">
+  <style>
+    :root{color-scheme:dark;--bg:#101612;--panel:#171f1a;--line:#2b3930;--text:#eff5ef;--muted:#94a49a;--green:#a8e2b0}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    main{max-width:1100px;margin:0 auto;padding:28px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.top a{color:var(--green);text-decoration:none}.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px}.row{display:flex;gap:9px;flex-wrap:wrap;margin:15px 0}.button{border:1px solid var(--line);border-radius:9px;background:#1d2821;padding:9px 13px;color:var(--text);font-weight:600;cursor:pointer}.button:hover{border-color:#718d77}.button:disabled{opacity:.45;cursor:not-allowed}.hint{color:var(--muted);font-size:12px}.local{padding:10px 12px;border:1px solid #445b49;background:#1d2b21;border-radius:10px;color:#cfe5d2;font-size:12px;margin:14px 0}.term{height:min(67vh,700px);min-height:340px;border:1px solid #344238;border-radius:10px;padding:8px;background:#101612}.status{color:var(--muted);font-size:12px}h1{font-size:22px;margin:0}p{margin:6px 0}.foot{display:flex;justify-content:space-between;gap:10px;margin-top:10px}
+    @media(max-width:600px){main{padding:16px}.card{padding:14px}.term{min-height:300px}.fields{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <div class="top"><a href="/">← В общую комнату</a><span class="hint">Личный доступ</span></div>
+  <section class="card">
+    <h1>Твои терминалы</h1>
+    <p class="hint">Claude Code и Codex запускаются здесь обычным интерактивным способом под уже подключёнными подписками.</p>
+    <div class="local">Каждый компьютер должен отдельно войти в твои аккаунты Claude Code и Codex. Имя устройства, проект и задача сохранятся в общей ленте. Сейчас терминал подключён только на этом компьютере.</div>
+    <div class="fields"><label>Имя компьютера<input id="deviceName" placeholder="Например: Рабочий Mac"></label><label>Проект<input id="projectName" placeholder="Например: Мой проект"></label><label>Текущая задача<input id="taskName" placeholder="Например: настроить Instagram-воркфлоу"></label><label>Папка проекта на этом компьютере<input id="workdir" placeholder="Например: C:\Projects\MyApp"></label></div>
+    <div class="row"><button class="button" id="claude">Открыть Claude Code</button><button class="button" id="codex">Открыть Codex</button><button class="button" id="stop" disabled>Завершить терминал</button></div>
+    <div id="terminal" class="term"></div>
+    <div class="foot"><span id="status" class="status">Подключение к локальному терминалу…</span><span class="hint">Вводишь запросы ты; история чата не копируется в общую память.</span></div>
+  </section>
+</main>
+<script src="/terminal-assets/@xterm/xterm/lib/xterm.js"></script>
+<script src="/terminal-assets/@xterm/addon-fit/lib/addon-fit.js"></script>
+<script>
+  const term=new Terminal({cursorBlink:true,convertEol:false,scrollback:3000,fontSize:13,fontFamily:'Menlo,Monaco,monospace',theme:{background:'#101612',foreground:'#e8f1e9',cursor:'#a8e2b0',selectionBackground:'#37503d'}});
+  const fit=new FitAddon.FitAddon();term.loadAddon(fit);term.open(document.getElementById('terminal'));
+  const status=document.getElementById('status'),stop=document.getElementById('stop');
+  const deviceName=document.getElementById('deviceName'),projectName=document.getElementById('projectName'),taskName=document.getElementById('taskName'),workdir=document.getElementById('workdir');
+  deviceName.value=localStorage.getItem('teamDeviceName')||'';projectName.value=localStorage.getItem('teamProjectName')||'';taskName.value=localStorage.getItem('teamTaskName')||'';workdir.value=localStorage.getItem('teamWorkdir')||'';
+  fetch('/api/devices').then(r=>r.json()).then(v=>{if(!deviceName.value)deviceName.value=v.devices?.[0]?.name||'Мой компьютер';}).catch(()=>{});
+  fetch('/api/state').then(r=>r.json()).then(v=>{if(!projectName.value)projectName.value=v.project?.name||'';}).catch(()=>{});
+  const ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/terminal-socket`);
+  ws.onopen=()=>{status.textContent='Локальное подключение готово';fit.fit();};
+  ws.onclose=()=>{status.textContent='Соединение закрыто. Вернись в общую комнату и открой экран заново.';stop.disabled=true;};
+  ws.onerror=()=>{status.textContent='Терминал доступен только в браузере на компьютере, где запущен Team Room.';};
+  ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='output')term.write(m.data);if(m.type==='started'){status.textContent=`Работает ${m.provider==='claude'?'Claude Code':'Codex'} · вводишь запросы вручную`;stop.disabled=false;}if(m.type==='exit'){status.textContent='Терминал завершён';stop.disabled=true;}if(m.type==='error')status.textContent=m.data;};
+  term.onData(data=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'input',data}));});
+  function start(provider){if(ws.readyState===WebSocket.OPEN){localStorage.setItem('teamDeviceName',deviceName.value);localStorage.setItem('teamProjectName',projectName.value);localStorage.setItem('teamTaskName',taskName.value);localStorage.setItem('teamWorkdir',workdir.value);ws.send(JSON.stringify({type:'start',provider,deviceName:deviceName.value,projectName:projectName.value,task:taskName.value,workdir:workdir.value}));}}
+  document.getElementById('claude').onclick=()=>start('claude');document.getElementById('codex').onclick=()=>start('codex');
+  stop.onclick=()=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'stop'}));};
+  const resize=()=>{try{fit.fit();if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'resize',cols:term.cols,rows:term.rows}));}catch{}};
+  new ResizeObserver(resize).observe(document.getElementById('terminal'));window.addEventListener('beforeunload',()=>ws.close());
+</script>
+</body></html>

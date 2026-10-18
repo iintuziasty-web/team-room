@@ -443,3 +443,15 @@ test("a newer manually deployed base is preferred over an older managed slot", (
     assert.equal(supervisor.slot, null);
     await supervisor.close();
   }));
+
+test("update result written after candidate startup is visible without another restart", () =>
+  temporary(async (directory) => {
+    const instance = await new HubUpdates({ storage: directory, version: "1.1.0" }).init();
+    assert.equal(instance.status().lastResult, null);
+    await fs.writeFile(path.join(instance.folder, "last-result.json"), JSON.stringify({ ok: true, version: "1.1.0" }));
+    await instance.refreshResult();
+    assert.equal(instance.status().lastResult.ok, true);
+    await fs.writeFile(path.join(instance.folder, "last-result.json"), JSON.stringify({ ok: false, message: "Recovered previous version" }));
+    await instance.refreshResult();
+    assert.equal(instance.status().lastResult.ok, false);
+  }));

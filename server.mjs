@@ -1194,7 +1194,7 @@ const server=http.createServer(async(req,res)=>{
        return send(res,200,safeState(user),{'set-cookie':[cookie,secureCookie('trc_challenge','',0,secureSite)]});
      }
      const user=currentUser(req)||importUser(req,url);if(!user)return send(res,401,{error:'Войди в Team Room.'});
-     if(req.method==='GET'&&url.pathname==='/api/updates'){if(url.searchParams.get('check')==='1'){requireOwner(user);securityLimits.take('release-check:'+user.id,10,3600000);await hubUpdates.check({force:true});}return send(res,200,hubUpdates.status());}
+     if(req.method==='GET'&&url.pathname==='/api/updates'){await hubUpdates.refreshResult();if(url.searchParams.get('check')==='1'){requireOwner(user);securityLimits.take('release-check:'+user.id,10,3600000);await hubUpdates.check({force:true});}return send(res,200,hubUpdates.status());}
      if(req.method==='PATCH'&&url.pathname==='/api/updates'){requireOwner(user);return send(res,200,await hubUpdates.settings((await jsonBody(req)).enabled));}
      if(req.method==='POST'&&url.pathname==='/api/updates/prepare'){requireOwner(user);securityLimits.take('release-prepare:'+user.id,5,3600000);return send(res,200,await hubUpdates.prepare((await jsonBody(req)).version));}
      if(req.method==='POST'&&url.pathname==='/api/updates/apply'){requireOwner(user);const id=hubUpdates.apply((await jsonBody(req)).version);updateMaintenance=true;send(res,202,{restarting:true});setTimeout(()=>process.send?.({type:'community-update-apply',id}),150);return;}

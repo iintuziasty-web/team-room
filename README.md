@@ -6,6 +6,12 @@
 
 [Сайт и демонстрация](https://iintuziasty-web.github.io/team-room/) · [Подробная установка](docs/INSTALL.md) · [Как устроена изоляция](docs/ISOLATION.md) · [Безопасность](SECURITY.md)
 
+## Статус выпуска
+
+**Community preview для самостоятельного размещения.** В комплекте исходники, инструкция и базовые автоматические проверки. Готового общего сервиса и подписанного установщика под чужой сервер нет. Реальные подписки, обе архитектуры Mac и физический iPhone требуют отдельной проверки на вашей установке.
+
+[Результаты проверки](docs/QUALITY.md) · [Изменения](CHANGELOG.md) · [Участие в разработке](CONTRIBUTING.md) · [Передача репозитория и выпуск](docs/MAINTAINERS.md)
+
 ## Что умеет
 
 - Продолжать разговор с Claude Code или Codex с историей, файлами и краткой памятью проекта.
@@ -19,7 +25,7 @@
 
 ## Начать локально
 
-Нужен **Node.js 22 или новее**.
+Нужен **Node.js 22.9 или новее**.
 
 ```sh
 git clone https://github.com/iintuziasty-web/team-room.git
@@ -68,6 +74,8 @@ TEAMROOM_HUB_URL=https://your-hub.example npm run build:mac
 ## Разработка и публикация
 
 ```sh
+npm run check
+npm test
 npm run audit:public
 npm run site
 ```

@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {hubOrigin} from '../lib/community-origin.mjs';
+import {prepareSourcePackage} from './source-package.mjs';
 const hubUrl=hubOrigin(process.env.TEAMROOM_HUB_URL);
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -62,10 +63,7 @@ await fs.writeFile(path.join(dist,simulator?'simulator-build-report.json':'build
 if (!archiveOnly) {
   const packageRoot = path.join(cache,'source-package'); const packageDir=path.join(packageRoot,'Team Room iOS');
   await fs.rm(packageRoot,{recursive:true,force:true}); await fs.mkdir(packageDir,{recursive:true});
-  for (const name of ['Sources','resources','TeamRoom.xcodeproj','build.mjs','README.md','.gitignore']) {
-    const source=path.join(root,name);
-    await fs.cp(source,path.join(packageDir,name),{recursive:true,filter:p=>!['xcuserdata','.DS_Store'].includes(path.basename(p))&&!path.basename(p).startsWith('._')});
-  }
+  await prepareSourcePackage(root,packageDir);
   const sourceZip=path.join(dist,`Team-Room-${version}-iOS-Xcode.zip`);
   await fs.rm(sourceZip,{force:true});
   await run('/usr/bin/ditto',['-c','-k','--norsrc','--noextattr','--noqtn','--keepParent',packageDir,sourceZip],'source-package.log');

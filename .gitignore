@@ -47,3 +47,10 @@ instance.json
 Info.configured.plist
 playwright-report/
 .playwright-mcp/
+
+# Local credentials and generated native resources.
+auth.json
+credentials.json
+process-owners.json*
+provider-sessions.json*
+ios-app/resources/Assets.xcassets/

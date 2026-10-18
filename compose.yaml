@@ -9,7 +9,7 @@ services:
       TEAM_ROOM_SETUP_TOKEN: ${TEAM_ROOM_SETUP_TOKEN:?Run npm run setup first}
       TEAM_ROOM_TRUST_PROXY: 1
       TEAM_ROOM_DATA_DIR: /data
-      PUBLIC_URL: https://${TEAM_ROOM_DOMAIN}
+      PUBLIC_URL: https://${TEAM_ROOM_DOMAIN:?Set TEAM_ROOM_DOMAIN to your own DNS name}
     volumes:
       - team-room-data:/data
     expose:
@@ -23,7 +23,7 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     environment:
-      TEAM_ROOM_DOMAIN: ${TEAM_ROOM_DOMAIN}
+      TEAM_ROOM_DOMAIN: ${TEAM_ROOM_DOMAIN:?Set TEAM_ROOM_DOMAIN to your own DNS name}
     ports:
       - "80:80"
       - "443:443"

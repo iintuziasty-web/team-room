@@ -8,7 +8,9 @@
     "audit:public": "node scripts/audit-public.mjs",
     "site": "node scripts/serve-site.mjs",
     "build:mac": "node mac-app/build.mjs",
-    "setup": "node scripts/setup.mjs"
+    "setup": "node scripts/setup.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check-source.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.31.0",
@@ -19,6 +21,6 @@
   "description": "Self-hosted workspace for Claude Code and Codex across your own devices",
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.9"
   }
 }

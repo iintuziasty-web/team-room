@@ -30,3 +30,5 @@ scripts
 **/session-board.json*
 .env
 .env.*
+
+.community-updates/

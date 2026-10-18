@@ -64,9 +64,9 @@ test(
         }
       }
     }
-    async function start() {
+    async function start(script = "server.mjs") {
       // Deliberately omit the developer's provider credentials and production settings.
-      child = spawn(process.execPath, ["server.mjs"], {
+      child = spawn(process.execPath, [script], {
         cwd: root,
         env: {
           PATH: process.env.PATH,
@@ -76,6 +76,7 @@ test(
           PORT: String(port),
           PUBLIC_URL: origin,
           TEAM_ROOM_HUB_ONLY: "1",
+          TEAM_ROOM_DISABLE_UPDATE_CHECKS: "1",
           TEAM_ROOM_DATA_DIR: path.join(directory, "data"),
           TEAM_ROOM_SETUP_TOKEN: setupToken,
         },
@@ -199,6 +200,44 @@ test(
           assert.equal(JSON.stringify(state).includes(setupToken), false);
           assert.equal(JSON.stringify(state).includes("tokenHash"), false);
           assert.equal(JSON.stringify(state).includes("password"), false);
+        },
+      );
+      await t.test(
+        "only the owner can configure or prepare server updates",
+        async () => {
+          await json("/api/updates", { cookie: owner.cookie });
+          await json(
+            "/api/updates",
+            {
+              method: "PATCH",
+              cookie: member.cookie,
+              body: { enabled: false },
+            },
+            403,
+          );
+          await json(
+            "/api/updates/prepare",
+            {
+              method: "POST",
+              cookie: member.cookie,
+              body: { version: "1.1.0" },
+            },
+            403,
+          );
+          await json("/api/updates", {
+            method: "PATCH",
+            cookie: owner.cookie,
+            body: { enabled: false },
+          });
+          await json(
+            "/api/updates/prepare",
+            {
+              method: "POST",
+              cookie: owner.cookie,
+              body: { version: "1.1.0" },
+            },
+            409,
+          );
         },
       );
       const project = (
@@ -361,6 +400,16 @@ test(
             (await json("/api/bootstrap")).value.setupRequired,
             false,
           );
+        },
+      );
+      await t.test(
+        "managed launcher preserves login and enables voluntary server updates",
+        async () => {
+          await stop();
+          await start("launch.mjs");
+          const result = await json("/api/updates", { cookie: owner.cookie });
+          assert.equal(result.value.managed, true);
+          await json("/api/state", { cookie: owner.cookie });
         },
       );
       await t.test(

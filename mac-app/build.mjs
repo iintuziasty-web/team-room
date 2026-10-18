@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {hubOrigin} from '../lib/community-origin.mjs';
-const hubUrl=hubOrigin(process.env.TEAMROOM_HUB_URL);
+const hubUrl=process.env.TEAMROOM_HUB_URL?hubOrigin(process.env.TEAMROOM_HUB_URL):'';
 const xml=value=>String(value).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&apos;'}[c]));
 
 const exec = promisify(execFile);
@@ -28,7 +28,7 @@ const pins = JSON.parse(await fs.readFile(path.join(resources, 'versions.json'),
 const appPackage = JSON.parse(await fs.readFile(path.join(project, 'package.json'), 'utf8'));
 const version = process.env.TEAMROOM_APP_VERSION || appPackage.version;
 const buildNumber = process.env.TEAMROOM_APP_BUILD || version.replace(/[^0-9.]/g, '');
-const buildReport = {version, build: buildNumber, minimumMacOS: pins.minimumMacOS, architectures,
+const buildReport = {hubMode:hubUrl?'custom':'generic',version, build: buildNumber, minimumMacOS: pins.minimumMacOS, architectures,
                      runtime: {node: pins.node, codex: pins.codex, claude: pins.claude},
                      signing: identity === '-' ? 'ad-hoc' : 'Developer ID', notarized: false,
                      downloads: [], artifacts: []};
@@ -275,10 +275,11 @@ console.log('Собираю приложение Team Room.');
 await copyConnector();
 const updateKey=process.env.TEAMROOM_UPDATE_PUBLIC_KEY;
 if(updateKey){const key=await fs.readFile(updateKey,'utf8');crypto.createPublicKey(key);await fs.writeFile(path.join(bundledResources,'desktop','update-public-key.pem'),key);}
-await fs.writeFile(path.join(bundledResources,'instance.json'),JSON.stringify({hubUrl,updatesEnabled:Boolean(updateKey)}));
+const updateChannel=process.env.TEAMROOM_UPDATE_CHANNEL==='off'?'off':updateKey?'private':'community';
+await fs.writeFile(path.join(bundledResources,'instance.json'),JSON.stringify({hubUrl:hubUrl||null,updateChannel,updatesEnabled:updateChannel!=='off'}));
 for (const arch of architectures) await bundleRuntime(arch, prepared.get(arch));
 await compile(); await verifyPublicBundle();
-await fs.writeFile(path.join(bundledResources, 'build-info.json'), JSON.stringify({version, build: buildNumber, architectures, minimumMacOS: pins.minimumMacOS, runtime: buildReport.runtime}, null, 2));
+await fs.writeFile(path.join(bundledResources, 'build-info.json'), JSON.stringify({hubMode:hubUrl?'custom':'generic',version, build: buildNumber, architectures, minimumMacOS: pins.minimumMacOS, runtime: buildReport.runtime}, null, 2));
 await run('/usr/bin/codesign', ['--force', '--sign', identity, ...(identity === '-' ? ['--timestamp=none'] : ['--options', 'runtime', '--timestamp']), bundle]);
 await run('/usr/bin/codesign', ['--verify', '--strict', bundle]);
 console.log('Готовлю установочный архив.');

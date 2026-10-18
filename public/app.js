@@ -6,6 +6,7 @@ import {PhoneNotifications} from './notifications.js';
 import {VoiceConversation} from './voice-conversation.js';
 import {UsagePopover,usageMeterState,weeklyQuotaState,formatUsagePercent} from './usage-popover.js';
 import {contextMeter} from './session-context.js';
+import {CommunityUpdates} from './community-updates.js';
 import {renderProfileMenu} from './profile-menu.js';
 import {SidebarSections} from './sidebar-layout.js';
 import {SidebarHover} from './sidebar-hover.js';
@@ -992,7 +993,7 @@ function renderShell(){if(!chat)executionMode=executionPreference();
  $('#message-input').onpaste=e=>{const list=Array.from(e.clipboardData.files);if(list.length){e.preventDefault();void uploadFiles(list,false)}};
  $('#file-picker').onchange=e=>{void uploadFiles(Array.from(e.target.files),false);e.target.value=''};
  $('#folder-picker').onchange=e=>{void uploadFiles(Array.from(e.target.files),true);e.target.value=''};
- sessionBoard.attach();syncWorkspaceControls({restore:true});sidebarSections.attach($('#sidebar'),{userId:state.me.id,embedded:isEmbeddedPane});sidebarHover.attach($('.app'),{embedded:isEmbeddedPane});bindReadingGestures($('#messages'));bindSidebarGestures($('#sidebar'));$('.sidebar').addEventListener('click',event=>{if(event.target.closest('.side-links button,.profile-button'))closeSidebar(false)});syncViewport();renderChatList();renderDevicesPicker();renderMessages();renderAttachments();if(filePanel)void renderFiles();
+ communityUpdates.badge();sessionBoard.attach();syncWorkspaceControls({restore:true});sidebarSections.attach($('#sidebar'),{userId:state.me.id,embedded:isEmbeddedPane});sidebarHover.attach($('.app'),{embedded:isEmbeddedPane});bindReadingGestures($('#messages'));bindSidebarGestures($('#sidebar'));$('.sidebar').addEventListener('click',event=>{if(event.target.closest('.side-links button,.profile-button'))closeSidebar(false)});syncViewport();renderChatList();renderDevicesPicker();renderMessages();renderAttachments();if(filePanel)void renderFiles();
 }
 function closeSidebar(restoreFocus=true){
  sidebarHover.hide();
@@ -1818,6 +1819,8 @@ window.showNotifications=async()=>{
   $('#push-demo').onclick=async()=>{try{await api('/notifications/demo','POST',{chatId:selectedId},{timeoutMs:10000});if(current())toast('Проверочное уведомление отправлено')}catch(error){if(current())toast(error.message,'error')}};
  }catch(error){if(current())$('#push-state').textContent=error.message;}
 };
+const communityUpdates=new CommunityUpdates({api,dialog,esc,state:()=>state});
+window.showCommunityUpdates=()=>communityUpdates.show(false);
 window.showProfile=()=>dialog(state.me.name,renderProfileMenu(state,esc));
 window.showInvite=async code=>{try{const invite=typeof code==='string'?code:(await api('/invite','POST',{})).inviteCode;dialog('Подключить другой аккаунт',`<p>Открой этот же адрес пространства на другом компьютере, выбери «У меня есть код приглашения» и задай другое имя.</p><div class="code-copy">${esc(invite)}</div><p>Этот код действует 7 дней и даёт доступ к общим чатам, памяти и файлам. Новый код отменяет предыдущий.</p>`)}catch(error){toast(error.message,'error')}};
 function clearAuthDialog(){clearPreviewTools();chatTools.clear();

@@ -12,4 +12,4 @@ RUN chmod +x /app/docker-entrypoint.sh
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 EXPOSE 4173
 # Heap ceiling for large self-hosted archives; memory is allocated as needed.
-CMD ["node", "--max-old-space-size=4096", "server.mjs"]
+CMD ["node", "--max-old-space-size=4096", "launch.mjs"]

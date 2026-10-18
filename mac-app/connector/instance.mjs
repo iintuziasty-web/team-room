@@ -10,5 +10,6 @@ function origin(value){
  if((url.protocol!=='https:'&&!(local&&url.protocol==='http:'))||url.username||url.password||url.search||url.hash||!['','/'].includes(url.pathname))throw new Error('Неверный адрес собственного сервера.');
  return url.origin;
 }
-export const HUB=origin(config.hubUrl||process.env.TEAMROOM_HUB_URL);
-export const updatesEnabled=config.updatesEnabled===true;
+export const HUB=origin(process.env.TEAMROOM_HUB_URL||config.hubUrl);
+export const updateChannel=config.updateChannel||(config.updatesEnabled===true?'private':'off');
+export const updatesEnabled=updateChannel!=='off';

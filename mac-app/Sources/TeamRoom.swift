@@ -2,7 +2,29 @@ import AppKit
 import WebKit
 import UniformTypeIdentifiers
 
-private let roomURL = URL(string: Bundle.main.object(forInfoDictionaryKey: "TeamRoomHubURL") as! String)!
+private var roomURL: URL!
+@MainActor
+private func selectCommunityHub() -> URL? {
+    func clean(_ value: String?) -> URL? {
+        guard let value, var c = URLComponents(string: value.trimmingCharacters(in: .whitespacesAndNewlines)), let host = c.host, !host.isEmpty,
+              c.user == nil, c.password == nil, c.query == nil, c.fragment == nil, ["", "/"].contains(c.path),
+              c.scheme?.lowercased() == "https" || (c.scheme?.lowercased() == "http" && ["localhost", "127.0.0.1", "::1"].contains(host.lowercased())) else { return nil }
+        c.scheme = c.scheme?.lowercased(); c.host = host.lowercased(); if (c.scheme == "https" && c.port == 443) || (c.scheme == "http" && c.port == 80) { c.port = nil }
+        return c.url
+    }
+    if let saved = clean(UserDefaults.standard.string(forKey: "communityHubURL")) { return saved }
+    if let initial = clean(Bundle.main.object(forInfoDictionaryKey: "TeamRoomHubURL") as? String) {
+        UserDefaults.standard.set(initial.absoluteString, forKey: "communityHubURL"); return initial
+    }
+    let field = NSTextField(string: ""); field.placeholderString = "https://your-hub.example"; field.frame = NSRect(x: 0, y: 0, width: 400, height: 28)
+    let alert = NSAlert(); alert.messageText = "Адрес вашего Team Room"; alert.informativeText = "Укажите свой HTTPS-сервер. Приложение не подключается к чужому пространству автоматически. Адрес сохранится при обновлении программы."; alert.accessoryView = field
+    alert.addButton(withTitle: "Подключиться"); alert.addButton(withTitle: "Отмена")
+    while alert.runModal() == .alertFirstButtonReturn {
+        if let url = clean(field.stringValue) { UserDefaults.standard.set(url.absoluteString, forKey: "communityHubURL"); return url }
+        alert.informativeText = "Нужен HTTPS-адрес без пути, параметров и пароля. HTTP разрешён только для localhost."
+    }
+    return nil
+}
 private let brandBackground = NSColor(srgbRed: 0.082, green: 0.082, blue: 0.082, alpha: 1)
 private let brandAccent = NSColor(srgbRed: 0.843, green: 0.467, blue: 0.341, alpha: 1)
 
@@ -411,7 +433,7 @@ final class RoomWindow: NSWindowController, NSWindowDelegate, WKNavigationDelega
         webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
             Task { @MainActor in
                 guard let self, applicationPage(self.webView.url) else { completion(nil); return }
-                let cookie = cookies.first { $0.name == "team_session" && $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == roomURL.host && $0.path == "/" && $0.isSecure && ($0.expiresDate ?? .distantFuture) > Date() }
+                let cookie = cookies.first { $0.name == "trc_session" && $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == roomURL.host && $0.path == "/" && $0.isSecure && ($0.expiresDate ?? .distantFuture) > Date() }
                 completion(cookie?.value)
             }
         }
@@ -519,8 +541,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var wake: NSObjectProtocol?
     private var localDeviceTimer: Timer?
     private var localDeviceReading = false
+    private var releaseTimer: Timer?
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
+        guard let hub = selectCommunityHub() else { NSApp.terminate(nil); return }; roomURL = hub
         helper = NativeHelper(); room = RoomWindow(); computer = ComputerController(helper: helper); updates = UpdateController(helper: helper)
         room.showComputer = { [weak self] in self?.computer.present() }
         room.requestLocalDevice = { [weak self] in self?.refreshLocalDevice() }
@@ -529,14 +553,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         helper.event = { [weak self] packet in self?.computer.receiveEvent(packet); self?.updates.receiveEvent(packet); if ["installed", "login-complete", "connector-update"].contains(packet["event"] as? String ?? "") { self?.refreshLocalDevice() } }
         buildMenu(); room.window?.center(); room.open()
         refreshLocalDevice()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 45) { [weak self] in self?.checkReleaseNotice() }
+        releaseTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in Task { @MainActor in self?.checkReleaseNotice() } }
         localDeviceTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in Task { @MainActor in self?.refreshLocalDevice() } }
         NSApp.activate(ignoringOtherApps: true)
         wake = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.room.reconnect(); self?.refreshLocalDevice() } }
     }
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { room.open(); return true }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { room?.open(); return true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationWillBecomeActive(_ notification: Notification) { room?.reconnect(); refreshLocalDevice() }
-    func applicationWillTerminate(_ notification: Notification) { localDeviceTimer?.invalidate(); helper?.close(); if let wake { NSWorkspace.shared.notificationCenter.removeObserver(wake) } }
+    func applicationWillTerminate(_ notification: Notification) { localDeviceTimer?.invalidate(); releaseTimer?.invalidate(); helper?.close(); if let wake { NSWorkspace.shared.notificationCenter.removeObserver(wake) } }
     private func refreshLocalDevice() {
         guard helper != nil, room != nil, !localDeviceReading else { return }
         localDeviceReading = true
@@ -551,6 +577,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         app.addItem(withTitle: "О Team Room", action: #selector(about), keyEquivalent: "")
         app.addItem(.separator()); app.addItem(withTitle: "Этот Mac…", action: #selector(showComputer), keyEquivalent: ",")
         app.addItem(withTitle: "Проверить обновления…", action: #selector(showUpdates), keyEquivalent: "")
+        let autoUpdates = app.addItem(withTitle: "Проверять обновления автоматически", action: #selector(toggleReleaseChecks), keyEquivalent: ""); autoUpdates.state = UserDefaults.standard.object(forKey: "communityReleaseChecks") as? Bool == false ? .off : .on
         app.addItem(.separator()); app.addItem(withTitle: "Скрыть Team Room", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = app.addItem(withTitle: "Скрыть остальные", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h"); hideOthers.keyEquivalentModifierMask = [.command, .option]
         app.addItem(withTitle: "Показать все", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
@@ -577,6 +604,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for submenu in [app, file, view, help] { for item in submenu.items where item.action != nil && item.action != #selector(NSApplication.terminate(_:)) && item.action != #selector(NSWindow.performClose(_:)) && item.action != #selector(NSWindow.toggleFullScreen(_:)) { if responds(to: item.action!) { item.target = self } } }
     }
     private func add(_ menu: NSMenu, title: String, submenu: NSMenu) { let item = NSMenuItem(title: title, action: nil, keyEquivalent: ""); item.submenu = submenu; menu.addItem(item) }
+    @objc private func toggleReleaseChecks() {
+        let enabled = !(UserDefaults.standard.object(forKey: "communityReleaseChecks") as? Bool ?? true)
+        UserDefaults.standard.set(enabled, forKey: "communityReleaseChecks")
+        NSApp.mainMenu?.items.first?.submenu?.items.first { $0.action == #selector(toggleReleaseChecks) }?.state = enabled ? .on : .off
+        if enabled { checkReleaseNotice() }
+    }
+    private func checkReleaseNotice() {
+        guard helper != nil, UserDefaults.standard.object(forKey: "communityReleaseChecks") as? Bool != false else { return }
+        helper.request("updateStatus", timeout: 35) { result in
+            if case .success(let info) = result, info["available"] as? Bool == true {
+                NSApp.mainMenu?.items.first?.submenu?.items.first { $0.action == #selector(self.showUpdates) }?.title = "Доступно обновление " + (info["version"] as? String ?? "") + "…"
+            }
+        }
+    }
     @objc private func showUpdates() { updates.present() }
     @objc private func showRoom() { room.open() }
     @objc private func showComputer() { computer.present() }

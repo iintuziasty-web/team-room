@@ -33,7 +33,7 @@ final class UpdateController: NSWindowController {
                     self.detail.stringValue = info["notes"] as? String ?? "Новая версия Team Room."
                     self.phase = "prepare"; self.button.title = "Загрузить обновление"
                 } else {
-                    self.titleLabel.stringValue = "Установлена версия \(info["current"] as? String ?? "")"; self.detail.stringValue = "Обновлений пока нет."; self.phase = "check"; self.button.title = "Проверить снова"
+                    self.titleLabel.stringValue = "Установлена версия \(info["current"] as? String ?? "")"; self.detail.stringValue = info["message"] as? String ?? "Обновлений пока нет."; self.phase = "check"; self.button.title = "Проверить снова"
                 }
             case .failure(let error): self.failed(error)
             }

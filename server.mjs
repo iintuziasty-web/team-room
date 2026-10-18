@@ -10,6 +10,7 @@ import os from 'node:os';
 import {getHeapStatistics} from 'node:v8';
 import {fileURLToPath} from 'node:url';
 import {WebSocketServer} from 'ws';
+import {HubUpdates} from './lib/hub-updates.mjs';
 import {serveMacRelease} from './lib/mac-release.mjs';
 import {createAdminDiagnostics} from './lib/admin-diagnostics.mjs';
 import {SessionBoardStore,boardList,ownsBoardChat} from './lib/session-board.mjs';
@@ -65,7 +66,8 @@ const incomingResultEnvelopes=new IncomingResultEnvelopes(path.join(storage,'inc
 const oversizedRemoteResults=new Map();
 const fileUploads=new FileUploads(path.join(storage,'browser-uploads'));
 const uploadCleanup=setInterval(()=>void fileUploads.cleanup().catch(console.error),3600000);uploadCleanup.unref();
-let shuttingDown=false;
+let shuttingDown=false,updateMaintenance=process.env.TEAM_ROOM_UPDATE_TRIAL==='1',writeRequests=0;
+process.on('message',packet=>{if(packet?.type==='community-update-committed')updateMaintenance=false;else if(packet?.type==='community-update-rejected'){updateMaintenance=false;hubUpdates.phase='ready';hubUpdates.error=String(packet.message||'Обновление не установлено.');}});
 const dataPath=path.join(storage,'team-data.json');
 const port=Number(process.env.PORT||4173);const host=process.env.HOST||'127.0.0.1';
 const now=()=>new Date().toISOString();const id=()=>crypto.randomUUID();const tokenHash=value=>digest(Buffer.from(value));
@@ -218,6 +220,8 @@ const providers=new Providers();const accounts=await new ProviderAccounts(path.j
 const hubOnly=process.env.TEAM_ROOM_HUB_ONLY!=='0';const localId='local';const localName=process.env.DEVICE_NAME||os.hostname();
 const localVoice=hubOnly?null:new VoiceDevice(storage);const voiceRequests=new Set();
 const notifications=await new Notifications(storage,{sessions:()=>data.authSessions,users:()=>data.users,origin:canonicalOrigin||`http://127.0.0.1:${port}`,alive:event=>{const c=data.conversations.find(c=>c.id===event.chatId);if(!c)return false;if(event.demoUser)return true;if(event.approvalId)return c.approvals?.some(a=>a.id===event.approvalId);return c.messages?.some(m=>m.id===event.messageId)&&!c.messages.some(m=>m.role==='user'&&Date.parse(m.createdAt)>Date.parse(event.at));}}).init();
+const hubUpdates=await new HubUpdates({storage,version:appVersion,managed:process.env.TEAM_ROOM_MANAGED_UPDATES==='1'&&Boolean(process.send),idle:()=>!active.size&&!chatLaunches.size&&!chatLocks.size&&!requests.size&&!Object.keys(data.pendingRemote).length&&!messageCommits.size&&!fileUploads.queues.size&&!voiceRequests.size&&!memoryJobs.size&&!importLocks.size&&!importingChats.size&&!deletingProjects.size&&!deletingChats.size&&!projectDeleting.size&&!importRefreshBusy&&!accounts.logins.size&&!loginProcesses.size&&![...bridges.values()].some(ws=>ws.loginBusy||ws.accounts?.some(account=>account.loginBusy)||ws.skills?.importing)&&writeRequests<=1}).init();
+let updateTimer;if(process.env.TEAM_ROOM_DISABLE_UPDATE_CHECKS!=='1'){updateTimer=setInterval(()=>void hubUpdates.check(),6*3600000);updateTimer.unref();const first=setTimeout(()=>void hubUpdates.check(),20000);first.unref();}
 function notifyChat(chat,kind,message,extra={}){const event={id:extra.approvalId?'approval:'+extra.approvalId:kind+':'+message.id,kind,chatId:chat.id,projectId:chat.projectId,messageId:message.id,provider:message.provider,title:String(chat.title||'Чат').slice(0,100),userIds:[...new Set([...(chat.notificationUsers||[]),...data.users.filter(u=>u.name===chat.owner).map(u=>u.id)])],at:now(),...extra};void notifications.enqueue(event).catch(()=>console.error('Не удалось сохранить уведомление.'));}
 
 let localSkills=null,localSkillDiscovery=null;if(!hubOnly){localSkills=await new SkillDevice(path.join(storage,'storage','local-skills'),{loadBlob:hash=>skillStore.blob(hash)}).init();providers.skills=localSkills;localSkillDiscovery=new SkillDiscovery({codexList:()=>providers.skillList()});await localSkills.apply(skillStore.snapshot());}
@@ -272,7 +276,7 @@ async function createFork(source,input,user){
  try{return await promise;}finally{pendingForks.delete(key);for(const [map,id]of [[pendingChatCreates,projectId],[pendingForkSources,source.id]]){const count=(map.get(id)||1)-1;if(count)map.set(id,count);else map.delete(id);}}
 }
 function devices(){return [...(hubOnly?[]:[{id:localId,name:localName,owner:'Этот компьютер',online:true,local:true,mcpSyncVersion:1,mcp:localMcp?.info,skillsSyncVersion:1,skills:localSkills?.info,voiceVersion:1,executionModeVersion:1,permissionsVersion:1,accountsVersion:1,agentMonitorVersion:1,accounts:accounts.list(),accountsError:accounts.error||null}]),...data.devices.map(d=>({id:d.id,name:d.name,owner:d.owner,online:Boolean(bridges.get(d.id)?.readyState===1)&&!importMaintenance(d.id),maintenance:Boolean(importMaintenance(d.id)),lastSeen:d.lastSeen,executionModeVersion:bridges.get(d.id)?.executionModeVersion||0,permissionsVersion:bridges.get(d.id)?.permissionsVersion||0,connectorVersion:bridges.get(d.id)?.connectorVersion||null,agentMonitorVersion:bridges.get(d.id)?.agentMonitorVersion||0,fileTransferVersion:bridges.get(d.id)?.fileTransferVersion||0,liveInputVersion:bridges.get(d.id)?.liveInputVersion||0,voiceVersion:bridges.get(d.id)?.voiceVersion||0,accountsVersion:bridges.get(d.id)?.accountsVersion||0,accountsError:bridges.get(d.id)?.accountsError||null,accounts:bridges.get(d.id)?.accounts||d.accounts||[],status:bridges.get(d.id)?.status||null,statusCheckedAt:bridges.get(d.id)?.statusAt||null,mcpSyncVersion:bridges.get(d.id)?.mcpSyncVersion||0,mcp:bridges.get(d.id)?.mcp||null,skillsSyncVersion:bridges.get(d.id)?.skillsSyncVersion||0,skills:bridges.get(d.id)?.skills||null}))]}
-function safeState(user){return {me:{id:user.id,name:user.name,owner:isOwner(user)},security:telegramAuth.status(),settings:data.settings,members:data.users.map(({id,name})=>({id,name})),projects:orderedProjects(data.projects,user.projectOrder),project:orderedProjects(data.projects,user.projectOrder)[0],chats:data.conversations.map(c=>publicChat(c,user)),tasks:data.tasks,memories:data.memories,devices:devices()}}
+function safeState(user){return {me:{id:user.id,name:user.name,owner:isOwner(user)},security:telegramAuth.status(),settings:data.settings,updates:{current:appVersion,available:hubUpdates.status().available,version:hubUpdates.status().version},members:data.users.map(({id,name})=>({id,name})),projects:orderedProjects(data.projects,user.projectOrder),project:orderedProjects(data.projects,user.projectOrder)[0],chats:data.conversations.map(c=>publicChat(c,user)),tasks:data.tasks,memories:data.memories,devices:devices()}}
 function knownExecutionDevice(value){
  if(value==null||value==='')return null;
  if(typeof value!=='string'||value!==localId&&!data.devices.some(d=>d.id===value)||value===localId&&hubOnly)throw fail(400,'Выбери зарегистрированный компьютер для работы.');
@@ -524,7 +528,7 @@ async function memoryRun(options,prompt,project){
 const titleWorkspace={id:data.titleWorkspaceId,name:'Названия сессий'};
 const titleQueue=new TitleQueue({
  chats:()=>data.conversations,project:projectById,
- idle:(chat,selection)=>{if(shuttingDown)return false;if(!chat)return true;if(projectDeleting.has(chat.projectId)||!data.projects.some(p=>p.id===chat.projectId)||deletingChats.has(chat.id))return false;const deviceId=selection?.deviceId||chatExecutionDevice(chat);return Boolean(deviceId)&&!chatLocks.has(chat.id)&&!memoryJobs.size&&![...active.values()].some(r=>r.deviceId===deviceId)&&![...dispatchDevices.values()].includes(deviceId)&&!data.conversations.some(c=>c.run?.deviceId===deviceId);},
+ idle:(chat,selection)=>{if(shuttingDown||updateMaintenance)return false;if(!chat)return true;if(projectDeleting.has(chat.projectId)||!data.projects.some(p=>p.id===chat.projectId)||deletingChats.has(chat.id))return false;const deviceId=selection?.deviceId||chatExecutionDevice(chat);return Boolean(deviceId)&&!chatLocks.has(chat.id)&&!memoryJobs.size&&![...active.values()].some(r=>r.deviceId===deviceId)&&![...dispatchDevices.values()].includes(deviceId)&&!data.conversations.some(c=>c.run?.deviceId===deviceId);},
  choose:chat=>alternative({...chat.route,provider:chat.route?.provider||chat.provider||'claude',deviceId:chatExecutionDevice(chat)},new Set(),true),
  run:async(options,prompt)=>{if(options.deviceId===localId)await fs.mkdir(workspace(titleWorkspace),{recursive:true});return memoryRun(options,prompt,titleWorkspace);},
  persist,changed:chat=>{changed(chat);console.log(JSON.stringify({event:'session-title-updated',ready:data.conversations.filter(c=>c.titleSource==='auto'&&c.titleMeta?.version>=1).length,pending:data.conversations.filter(c=>c.titleSource==='auto'&&c.titleMeta?.version<1&&c.titleMeta?.status!=='waiting').length}));}
@@ -1134,11 +1138,12 @@ async function importSession(input,user,forcedDevice=null,loadedSource=null){
  });}finally{importLocks.delete(project.id);if(importedChatId)importingChats.delete(importedChatId)}
 }
 let importRefreshBusy=false;
-const sourceRefresh=setInterval(async()=>{if(importRefreshBusy)return;importRefreshBusy=true;try{for(const chat of data.conversations.filter(c=>!c.archivedAt&&c.importSource?.watch)){const src=chat.importSource;if(chatLocks.has(chat.id)||!devices().some(d=>d.id===src.deviceId&&d.online))continue;try{const current=await nativeRead(src.deviceId,src.provider,src.sessionId,src.files,src.accountId);if(chat.archivedAt||!chat.importSource?.watch)continue;if(current.sourceFingerprint===src.fingerprint&&current.fileFingerprint===src.fileFingerprint){if(src.active!==current.active||src.lastError){src.active=current.active;src.lastError=null;await persist();changed(chat);}continue;}await importSession({provider:src.provider,deviceId:src.deviceId,accountId:src.accountId,sessionId:src.sessionId,projectId:chat.projectId,files:src.files,watch:true},data.users.find(u=>u.name===chat.owner)||data.users[0],null,current);}catch(e){if(src.lastError!==e.message){src.lastError=e.message;await persist();changed(chat);}}}}finally{importRefreshBusy=false}},60000);sourceRefresh.unref();
+const sourceRefresh=setInterval(async()=>{if(importRefreshBusy||updateMaintenance||shuttingDown)return;importRefreshBusy=true;try{for(const chat of data.conversations.filter(c=>!c.archivedAt&&c.importSource?.watch)){const src=chat.importSource;if(chatLocks.has(chat.id)||!devices().some(d=>d.id===src.deviceId&&d.online))continue;try{const current=await nativeRead(src.deviceId,src.provider,src.sessionId,src.files,src.accountId);if(chat.archivedAt||!chat.importSource?.watch)continue;if(current.sourceFingerprint===src.fingerprint&&current.fileFingerprint===src.fileFingerprint){if(src.active!==current.active||src.lastError){src.active=current.active;src.lastError=null;await persist();changed(chat);}continue;}await importSession({provider:src.provider,deviceId:src.deviceId,accountId:src.accountId,sessionId:src.sessionId,projectId:chat.projectId,files:src.files,watch:true},data.users.find(u=>u.name===chat.owner)||data.users[0],null,current);}catch(e){if(src.lastError!==e.message){src.lastError=e.message;await persist();changed(chat);}}}}finally{importRefreshBusy=false}},60000);sourceRefresh.unref();
 function authCookie(result){return secureCookie('trc_challenge',result.nonce,300,secureSite);}
 function closeBrowserSessions(tokenHashToClose){for(const ws of events)if(!tokenHashToClose||ws.sessionHash===tokenHashToClose)ws.close(4001,'Вход завершён');}
 function validBrowserSession(ws){return data.authSessions.some(s=>s.tokenHash===ws.sessionHash&&s.expiresAt>Date.now());}
 const server=http.createServer(async(req,res)=>{
+ const writing=!['GET','HEAD','OPTIONS'].includes(req.method);if(writing){writeRequests++;let finished=false;const finish=()=>{if(!finished){finished=true;writeRequests--;}};res.once('finish',finish);res.once('close',finish);}
  try{
    const url=new URL(req.url,'http://localhost');
    securityHeaders(res,secureSite,{microphone:['/','/room','/room/','/index.html','/room/pane'].includes(url.pathname)});
@@ -1151,6 +1156,7 @@ const server=http.createServer(async(req,res)=>{
    if(req.method==='GET'&&url.pathname==='/health')return send(res,200,{ok:true,version:appVersion});
    if(req.method==='GET'&&url.pathname==='/favicon.ico')return res.writeHead(204).end();
    if(url.pathname.startsWith('/api/')){
+     if(writing&&updateMaintenance)throw fail(503,'Устанавливаю обновление. Дождись перезапуска сервера; история и файлы сохранены.');
      if(!sameOrigin(req,canonicalOrigin))throw fail(403,'Запрос пришёл с другого сайта.');
      if(req.method==='GET'&&url.pathname==='/api/bootstrap')return send(res,200,{setupRequired:!data.users.length,setupTokenRequired:!data.users.length,...telegramAuth.status()});
      if(req.method==='POST'&&['/api/setup','/api/join','/api/login'].includes(url.pathname)){
@@ -1188,6 +1194,10 @@ const server=http.createServer(async(req,res)=>{
        return send(res,200,safeState(user),{'set-cookie':[cookie,secureCookie('trc_challenge','',0,secureSite)]});
      }
      const user=currentUser(req)||importUser(req,url);if(!user)return send(res,401,{error:'Войди в Team Room.'});
+     if(req.method==='GET'&&url.pathname==='/api/updates'){if(url.searchParams.get('check')==='1'){requireOwner(user);securityLimits.take('release-check:'+user.id,10,3600000);await hubUpdates.check({force:true});}return send(res,200,hubUpdates.status());}
+     if(req.method==='PATCH'&&url.pathname==='/api/updates'){requireOwner(user);return send(res,200,await hubUpdates.settings((await jsonBody(req)).enabled));}
+     if(req.method==='POST'&&url.pathname==='/api/updates/prepare'){requireOwner(user);securityLimits.take('release-prepare:'+user.id,5,3600000);return send(res,200,await hubUpdates.prepare((await jsonBody(req)).version));}
+     if(req.method==='POST'&&url.pathname==='/api/updates/apply'){requireOwner(user);const id=hubUpdates.apply((await jsonBody(req)).version);updateMaintenance=true;send(res,202,{restarting:true});setTimeout(()=>process.send?.({type:'community-update-apply',id}),150);return;}
      if(req.method==='POST'&&url.pathname==='/api/logout'){const digest=tokenHash(cookieValue(req,'trc_session'));data.authSessions=data.authSessions.filter(s=>s.tokenHash!==digest);fileOpenLinks.revoke(user.id);await notifications.revokeSession(digest);closeBrowserSessions(digest);await persist();return send(res,200,{ok:true},{'set-cookie':[secureCookie('trc_session','',0,secureSite),secureCookie('trc_challenge','',0,secureSite)]})}
      const sessionHash=tokenHash(cookieValue(req,'trc_session')||'');
      if(url.pathname.startsWith('/api/notifications')||url.pathname.startsWith('/api/voice/')){if(!currentUser(req))throw fail(403,'Для этого действия войди в Team Room в браузере.');}
@@ -1783,11 +1793,11 @@ async function diagnosticSessions({signal}){
  return {at:now(),version:appVersion,memory:{heapUsedBytes:process.memoryUsage().heapUsed,heapLimitBytes:getHeapStatistics().heap_size_limit,rssBytes:process.memoryUsage().rss},activeCount:active.size,pendingCount:Object.keys(data.pendingRemote).length,devices:[...bridges.entries()].slice(0,50).map(([deviceId,ws])=>({deviceId,connected:ws.readyState===1,lastReceivedAt:ws.lastReceived?new Date(ws.lastReceived).toISOString():null,connectorVersion:ws.connectorVersion||null})),sessions:result};
 }
 if(hubOnly)try{adminDiagnostics=await createAdminDiagnostics({storage,sessions:diagnosticSessions});}catch{console.warn(JSON.stringify({event:'admin-diagnostics-unavailable'}));}
-server.listen(port,host,()=>{setTimeout(()=>{void ensureLocalClient();for(const chat of data.conversations)titleQueue.enqueue(chat);console.log(JSON.stringify({event:'session-title-migration',pending:data.conversations.filter(c=>c.titleSource==='auto'&&c.titleMeta?.version<1&&c.titleMeta?.status!=='waiting').length,manual:data.conversations.filter(c=>c.titleSource==='manual').length}));},3000).unref();console.log(`Team Room: http://127.0.0.1:${port}\nОбщие чаты, память и файлы. Адрес постоянный. ${host==='127.0.0.1'?'Сейчас доступен на этом компьютере.':'Доступен в локальной сети с входом по паролю.'}`)});
+server.listen(port,host,()=>{process.send?.({type:'community-hub-ready',version:appVersion});setTimeout(()=>{void ensureLocalClient();for(const chat of data.conversations)titleQueue.enqueue(chat);console.log(JSON.stringify({event:'session-title-migration',pending:data.conversations.filter(c=>c.titleSource==='auto'&&c.titleMeta?.version<1&&c.titleMeta?.status!=='waiting').length,manual:data.conversations.filter(c=>c.titleSource==='manual').length}));},3000).unref();console.log(`Team Room: http://127.0.0.1:${port}\nОбщие чаты, память и файлы. Адрес постоянный. ${host==='127.0.0.1'?'Сейчас доступен на этом компьютере.':'Доступен в локальной сети с входом по паролю.'}`)});
 async function shutdown(){
  if(shuttingDown)return;shuttingDown=true;
  await adminDiagnostics?.close().catch(()=>{});
- titleQueue.close();notifications.close();localVoice?.close();clearInterval(connectionWatchdog);clearTimeout(messageSaveTimer);messageSaveTimer=null;
+ titleQueue.close();notifications.close();localVoice?.close();clearInterval(connectionWatchdog);clearInterval(updateTimer);clearTimeout(messageSaveTimer);messageSaveTimer=null;
  // Only local provider children belong to this process. Remote workers keep
  // their durable run and reconnect after the hub has restarted.
  for(const record of active.values()){
@@ -1803,7 +1813,7 @@ async function shutdown(){
   await persist();process.exit(0);
  }catch(error){console.error('Не удалось завершить сохранение перед перезапуском:',error.message);process.exit(1);}
 }
-process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);
+process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);if(process.env.TEAM_ROOM_MANAGED_UPDATES==='1')process.once('disconnect',()=>void shutdown());
 
 async function setupTelegramWebhook(){try{await telegramAuth.ensureWebhook(canonicalOrigin);}catch(error){telegramAuth.webhookReady=false;telegramAuth.webhookError=error.message;console.error('Telegram: подключение получателей не готово:',error.message);}}
 if(hubOnly&&canonicalOrigin&&telegramAuth.status().telegramEnabled)void setupTelegramWebhook();

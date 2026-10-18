@@ -5,7 +5,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import {execFile,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
-import {HUB,updatesEnabled} from './instance.mjs';
+import {HUB,updatesEnabled,updateChannel} from './instance.mjs';
 const exec=promisify(execFile);
 let externalStorageModule;
 function storageModule(){if(!externalStorageModule){const bundled=new URL('../connect/lib/external-storage.mjs',import.meta.url);externalStorageModule=import(bundled.href).catch(error=>{if(error.code!=='ERR_MODULE_NOT_FOUND'||error.url&&error.url!==bundled.href)throw error;return import(new URL('../../lib/external-storage.mjs',import.meta.url).href);});}return externalStorageModule;}
@@ -16,6 +16,7 @@ async function privateDirectory(directory,existingBase=null){
 }
 const newer=(a,b)=>{const x=a.split('.').map(Number),y=b.split('.').map(Number);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]>y[i];return false;};
 async function boundedJSON(response){if(Number(response.headers.get('content-length'))>32768)throw new Error('Неверное описание обновления.');let text='';for await(const chunk of response.body){text+=Buffer.from(chunk).toString('utf8');if(text.length>32768)throw new Error('Описание обновления слишком большое.');}return JSON.parse(text);}
+let releaseChannelModule;function releaseChannel(){return releaseChannelModule||=import(new URL('../connect/lib/release-channel.mjs',import.meta.url).href).catch(error=>{if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;return import(new URL('../../lib/release-channel.mjs',import.meta.url).href);});}
 export class DesktopUpdater{
  constructor({resources,desktopRoot,event}){this.resources=resources;this.internalFolder=path.join(desktopRoot,'updates');this.folder=this.internalFolder;this.event=event;this.prepared=null;}
  async updateStorage(){
@@ -28,6 +29,12 @@ export class DesktopUpdater{
  async check(){
   const local=JSON.parse(await fs.readFile(path.join(this.resources,'build-info.json'),'utf8'));
   if(!updatesEnabled)return {available:false,current:local.version,message:'Обновления этой сборки настраивает владелец сервера.'};
+  if(updateChannel==='community'){
+   const channel=await releaseChannel(),release=await channel.latestRelease();if(!release?.assets.macos)return {available:false,current:local.version,message:'Обновлений пока нет.'};
+   const osVersion=(await exec('/usr/bin/sw_vers',['-productVersion'],{timeout:5000,maxBuffer:4096})).stdout.trim().split('.').map(Number),required=release.assets.macos.minimumMacOS.split('.').map(Number);
+   if(osVersion[0]<required[0]||osVersion[0]===required[0]&&osVersion[1]<required[1])throw new Error('Новая версия требует macOS '+release.assets.macos.minimumMacOS+' или новее.');
+   this.release={...release.assets.macos,version:release.version,notes:release.notes,community:true};return {available:channel.newerVersion(release.version,local.version),current:local.version,version:release.version,notes:release.notes,bytes:release.assets.macos.bytes};
+  }
   const response=await fetch(HUB+'/desktop/releases/latest',{redirect:'error',signal:AbortSignal.timeout(20000)});
   if(response.status===404)return {available:false,current:local.version,message:'Обновлений пока нет.'};
   if(!response.ok)throw new Error('Сервер обновлений недоступен. Попробуй позже.');
@@ -44,19 +51,30 @@ export class DesktopUpdater{
   const target=await fs.realpath(process.env.TEAMROOM_APP_PATH||path.resolve(this.resources,'../..')),parent=path.dirname(target);
   const allowed=['/Applications',path.join(os.homedir(),'Applications')];if(!allowed.includes(parent)||path.basename(target)!=='Team Room Community.app')throw new Error('Сначала перенеси Team Room в папку «Программы» и запусти оттуда.');
   try{await fs.access(parent,constants.W_OK)}catch{throw new Error('Нет прав на обновление в папке «Программы». Установи Team Room в «Программы» своего пользователя.');}
-  const updateStorage=await this.updateStorage();this.folder=updateStorage.folder;await this.requireStorage(updateStorage);await privateDirectory(this.folder,updateStorage.location?path.dirname(this.folder):null);await this.requireStorage(updateStorage);const stage=await fs.mkdtemp(path.join(this.folder,'release-')),archive=path.join(stage,'update.zip');
+  if(this.prepared?.version===release.version)return {ready:true,version:release.version,message:'Обновление уже подготовлено.'};
+  if(this.prepared){await fs.rm(this.prepared.candidate,{recursive:true,force:true});await fs.rm(this.prepared.stage,{recursive:true,force:true});this.prepared=null;}
+  const updateStorage=await this.updateStorage();this.folder=updateStorage.folder;await this.requireStorage(updateStorage);await privateDirectory(this.folder,updateStorage.location?path.dirname(this.folder):null);await this.requireStorage(updateStorage);for(const entry of await fs.readdir(this.folder,{withFileTypes:true}))if(entry.isDirectory()&&/^release-[A-Za-z0-9]+$/.test(entry.name)){const stale=path.join(this.folder,entry.name),stat=await fs.lstat(stale);if(Date.now()-stat.mtimeMs>86400000)await fs.rm(stale,{recursive:true,force:true});}
+  const parentSpace=await fs.statfs(parent),stageSpace=await fs.statfs(this.folder),sameDisk=(await fs.stat(parent)).dev===(await fs.stat(this.folder)).dev,unpacked=release.bytes*4,reserve=128*1024*1024;
+  if(Number(parentSpace.bavail)*Number(parentSpace.bsize)<unpacked+(sameDisk?release.bytes+unpacked:0)+reserve||Number(stageSpace.bavail)*Number(stageSpace.bsize)<release.bytes+unpacked+reserve)throw new Error('Недостаточно свободного места для безопасного обновления. Освободи место на диске приложения и повтори.');
+  const stage=await fs.mkdtemp(path.join(this.folder,'release-')),archive=path.join(stage,'update.zip');let candidate;
+  try{
   this.event('update',{stage:'downloading',message:'Загружаю Team Room '+release.version+'…'});
+  if(release.community){let lastProgress=-5;await (await releaseChannel()).downloadRelease(release,archive,{progress:(bytes,total)=>{const percent=Math.floor(bytes/total*100);if(percent>=lastProgress+5){lastProgress=percent;this.event('update',{stage:'downloading',message:'Загружаю обновление: '+percent+'%'});}}});}
+  else{
   const response=await fetch(HUB+release.path,{redirect:'error',signal:AbortSignal.timeout(600000)});if(!response.ok)throw new Error('Не удалось загрузить обновление. Повтори позже.');
   await this.requireStorage(updateStorage);const handle=await fs.open(archive,'wx',0o600),hash=crypto.createHash('sha256');let bytes=0,lastProgress=0;
   try{for await(const chunk of response.body){bytes+=chunk.length;if(bytes>release.bytes)throw new Error('Размер обновления не совпал.');hash.update(chunk);let offset=0;while(offset<chunk.length){const result=await handle.write(chunk,offset,chunk.length-offset);if(!result.bytesWritten)throw new Error('Не удалось сохранить обновление.');offset+=result.bytesWritten;}const pct=Math.floor(bytes/release.bytes*100);if(pct>=lastProgress+5){lastProgress=pct;this.event('update',{stage:'downloading',message:'Загружаю обновление: '+pct+'%'});}}await handle.sync();}finally{await handle.close();}
   if(bytes!==release.bytes||hash.digest('hex')!==release.sha256)throw new Error('Контрольная сумма обновления не совпала. Установка отменена.');
+  }
   this.event('update',{stage:'preparing',message:'Проверяю и подготавливаю новую версию…'});
   await this.requireStorage(updateStorage);await exec('/usr/bin/ditto',['-x','-k',archive,stage],{timeout:180000,maxBuffer:65536});
   const app=path.join(stage,'Team Room Community.app');const plist=JSON.parse((await exec('/usr/bin/plutil',['-convert','json','-o','-',path.join(app,'Contents','Info.plist')],{timeout:5000,maxBuffer:65536})).stdout);
   if(plist.CFBundleIdentifier!=='io.teamroom.community'||plist.CFBundleShortVersionString!==release.version)throw new Error('Обновление содержит другое приложение.');
+  if(release.community){const instance=JSON.parse(await fs.readFile(path.join(app,'Contents','Resources','instance.json'),'utf8'));if(String(plist.TeamRoomHubURL||'').trim()||instance.hubUrl||instance.updateChannel!=='community')throw new Error('Общий релиз содержит привязку к серверу. Установка отменена.');}
   await exec('/usr/bin/codesign',['--verify','--strict',app],{timeout:60000,maxBuffer:65536});
-  await this.requireStorage(updateStorage);const candidate=path.join(parent,'.TeamRoom-update-'+crypto.randomUUID()+'.app');await fs.cp(app,candidate,{recursive:true,dereference:false,force:false,errorOnExist:true});
+  await this.requireStorage(updateStorage);candidate=path.join(parent,'.TeamRoom-update-'+crypto.randomUUID()+'.app');await fs.cp(app,candidate,{recursive:true,dereference:false,force:false,errorOnExist:true});
   this.prepared={stage,app,candidate,target,version:release.version,updateStorage};return {ready:true,version:release.version,message:'Обновление готово. Можно перезапустить окно приложения; фоновые задачи продолжат работу.'};
+  }catch(error){if(candidate)await fs.rm(candidate,{recursive:true,force:true}).catch(()=>{});await fs.rm(stage,{recursive:true,force:true}).catch(()=>{});throw error;}
  }
  async install(){
   const p=this.prepared;if(!p)throw new Error('Сначала подготовь обновление.');

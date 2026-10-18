@@ -54,3 +54,5 @@ credentials.json
 process-owners.json*
 provider-sessions.json*
 ios-app/resources/Assets.xcassets/
+
+.community-updates/

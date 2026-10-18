@@ -193,3 +193,8 @@ test("source checks work for downloaded archives without Git metadata", () =>
     assert.equal(result.tracked, false);
     assert.deepEqual(result.files, ["src/main.mjs"]);
   }));
+
+test("native Community pairing uses the hub cookie namespace",async()=>{
+ const helper=await fs.readFile(path.join(root,'mac-app/connector/helper.mjs'),'utf8'),swift=await fs.readFile(path.join(root,'mac-app/Sources/TeamRoom.swift'),'utf8');
+ assert.ok(helper.includes("cookie:'trc_session='"));assert.ok(swift.includes('$0.name == "trc_session"'));assert.ok(swift.includes('communityHubURL'));assert.ok(!helper.includes("cookie:'team_session='"));
+});

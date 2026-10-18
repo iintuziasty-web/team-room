@@ -73,7 +73,7 @@ const desktop = await fs.readFile(
   "utf8",
 );
 if (
-  !desktop.includes("config.hubUrl||process.env.TEAMROOM_HUB_URL") ||
+  !desktop.includes("process.env.TEAMROOM_HUB_URL||config.hubUrl") ||
   /https:\/\/[a-z0-9.-]+/i.test(desktop)
 )
   errors.push("Native origin must be supplied by the installation");

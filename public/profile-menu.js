@@ -1,4 +1,5 @@
 const paths = {
+  update:'<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 6a8 8 0 0 1 13 2M5 16a8 8 0 0 0 13 2"/>',
   keyboard:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h1m3 0h1m3 0h1m3 0h1M6 13h1m3 0h1m3 0h1m3 0h1M7 16h10"/>',
   bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
   invite: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6m-3-3h6"/>',
@@ -32,6 +33,7 @@ export function renderProfileMenu(state, esc) {
       <p>Участникам доступны общие чаты, память и файлы.</p>
     </section>
     <div class="profile-menu-actions" aria-label="Настройки аккаунта">
+      ${action('update','Обновления Team Room',state?.updates?.available?'Доступна версия '+esc(state.updates.version):'Новые возможности и добровольная установка','showCommunityUpdates')}
       ${action('keyboard', 'Горячие клавиши', 'Поиск, новый чат и отправка с клавиатуры', 'showShortcuts')}
       ${action('bell', 'Уведомления', 'Вопросы моделей и завершение работы', 'showNotifications')}
       ${me.owner ? action('invite', 'Пригласить аккаунт', 'Доступ к общему пространству', 'showInvite') + action('shield', 'Безопасность входа', 'Telegram-коды и их получатели', 'showSecurity') : ''}
